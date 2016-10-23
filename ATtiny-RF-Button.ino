@@ -7,18 +7,22 @@
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit)) //OR
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit)) //AND
 
+//Device parameters
+const unsigned int channel = 1; //So the message can be picked up by the right receiver
+const unsigned int devType = 1; //Reads as "1" corresponding with BTN type
+const unsigned int sensorName1 = 3; //The number of this device - needs to be unique.
+
 //Interrupt variables
 volatile bool triggered=false;
+volatile bool longPressPrimer=false;
+volatile bool longerPressPrimer=false;
+volatile bool longestPressPrimer=false;
 volatile bool buttonState=false;
 volatile const unsigned int butPin = 3; //button pin
 volatile unsigned long lastTrigger;
 
+//General variables
 const unsigned int sendPin = 2; //RF pin
-int butState1=LOW;
-int butState2=HIGH;
-int devID = 4; //Reads as "3" corresponds with BTN type
-int sensorName1 = 3; //Reads as 2
-long lastPress=1;
 bool sendByte[4];
 
 void setup() {
@@ -34,14 +38,25 @@ void setup() {
 }
 
 void loop() {
-  butState2 = butState1;
-  butState1 = digitalRead(butPin);
-
   if (triggered) {
-    delay(10);
-    encodeMessage();
+    delay(0);
+    encodeMessage(1);
     triggered=false;
-    delay(30);
+  }
+  else if (buttonState && longPressPrimer && millis()-lastTrigger>700) {
+    delay(0);
+    encodeMessage(2);
+    longPressPrimer=false;
+  }
+  else if (buttonState && longerPressPrimer && millis()-lastTrigger>1700) {
+    delay(0);
+    encodeMessage(3);
+    longerPressPrimer=false;
+  }
+  else if (buttonState && longestPressPrimer && millis()-lastTrigger>4000) {
+    delay(0);
+    encodeMessage(4);
+    longestPressPrimer=false;
   }
   delay(0);
 }
@@ -51,20 +66,36 @@ ISR(PCINT0_vect) {
   if (buttonState && !triggered && (millis()-lastTrigger>200 || millis()<lastTrigger)) { //includes 200ms debounce
     lastTrigger=millis();
     triggered=true;
+    longPressPrimer=true;
+    longerPressPrimer=true;
+    longestPressPrimer=true;
+  }
+  else if (!buttonState && !triggered) {
+    lastTrigger=millis();
   }
 }
 
-void encodeMessage() { //message should read 15 1 6 14 or 1111 0001 0110 1110
+void encodeMessage(int msgType) { //message should read 15 1 6 14 or 1111 0001 0110 1110
   //regular pulses for receiver to calibrate
+  pulse(0);
+  pulse(0);
+  pulse(0);
+  pulse(0);
+  pulse(0);
+  pulse(0);
   pulse(0);
   pulse(0);
   pulse(0);
   pulse(0);
   
   encodeNumber(15); //Start  1111 to initiate message
-  encodeNumber(4); //number 4
+  encodeNumber(channel); //number 4
   encodeNumber(11); //comma
-  encodeNumber(9); //number 9
+  encodeNumber(devType); //number 9
+  encodeNumber(11); //comma
+  encodeNumber(sensorName1); //number 9
+  encodeNumber(11); //comma
+  encodeNumber(msgType); //number 9
   encodeNumber(13);//End  1101 - WIP on parity byte
   encodeNumber(12);//End  1100 - WIP on parity byte
 }
