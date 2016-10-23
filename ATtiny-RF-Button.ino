@@ -1,7 +1,7 @@
 /*  
  *   For sending RF signals from battery operated ATtiny85
  *   Code by Thomas Friberg (https://github.com/tomtheswede)
- *   Updated 9/10/2016
+ *   Updated 23/10/2016
  */
 
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit)) //OR
@@ -19,7 +19,7 @@ int butState2=HIGH;
 int devID = 4; //Reads as "3" corresponds with BTN type
 int sensorName1 = 3; //Reads as 2
 long lastPress=1;
-
+bool sendByte[4];
 
 void setup() {
   // put your setup code here, to run once:
@@ -49,31 +49,49 @@ void loop() {
 ISR(PCINT0_vect) {
   buttonState=!digitalRead(butPin);
   if (buttonState && !triggered && (millis()-lastTrigger>200 || millis()<lastTrigger)) { //includes 200ms debounce
+    lastTrigger=millis();
     triggered=true;
   }
 }
 
+void encodeMessage() { //message should read 15 1 6 14 or 1111 0001 0110 1110
+  //regular pulses for receiver to calibrate
+  pulse(0);
+  pulse(0);
+  pulse(0);
+  pulse(0);
+  
+  encodeNumber(15); //Start  1111 to initiate message
+  encodeNumber(4); //number 4
+  encodeNumber(11); //comma
+  encodeNumber(9); //number 9
+  encodeNumber(13);//End  1101 - WIP on parity byte
+  encodeNumber(12);//End  1100 - WIP on parity byte
+}
 
-void encodeMessage() { //message should read 3,2,f5
-  encodeNumber(2); //A signal to level the receiver/prep for start signal
-  encodeNumber(15); //Start
-  encodeNumber(devID); //code 4, reads as 3
-  encodeNumber(1); //comma
-  encodeNumber(sensorName1); //code 3 reads as 2
-  //encodeNumber(1); //comma
-  //encodeNumber(4); //3
-  //encodeNumber(12);//full stop
-  //encodeNumber(13);
-  //encodeNumber(6); //5
-  encodeNumber(14);//End
+void pulse(bool logic) {
+  if (logic) {
+    digitalWrite(sendPin,HIGH);
+    delayMicroseconds(575); 
+    digitalWrite(sendPin,LOW);
+    delayMicroseconds(250);
+  }
+  else {
+    digitalWrite(sendPin,HIGH);
+    delayMicroseconds(250);
+    digitalWrite(sendPin,LOW);
+    delayMicroseconds(600);
+  }
 }
 
 void encodeNumber(int num) {
-  for (int i=0; i<num; i++) {
-    digitalWrite(sendPin,HIGH);
-    delayMicroseconds(430);
-    digitalWrite(sendPin,LOW);
-    delayMicroseconds(400);
+  
+  for (int i=0; i<4; i++) {
+    if(bitRead(num,3-i)) { //a one
+      pulse(1);
+    }
+    else{ //a zero
+      pulse(0);
+    }
   }
-  delayMicroseconds(900);
 }
